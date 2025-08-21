@@ -48,7 +48,7 @@ export const signUp = async (req, res, next) => {
   ).toString();
 
   // Send Email
-  // eventEmitter.emit('sendEmail', { email });
+  eventEmitter.emit('sendEmail', { email });
 
   // Create user in database
   const user = await userModel.create({
