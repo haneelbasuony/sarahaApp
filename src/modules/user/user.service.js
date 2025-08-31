@@ -241,11 +241,22 @@ export const forgetPassword = async (req, res, next) => {
   if (!user) {
     throw new Error('User Email Doesnt exist');
   }
+
+  // Check if banned
+  if (user.banUntil && user.banUntil > new Date()) {
+    const waitTime = Math.ceil((user.banUntil - new Date()) / 1000);
+    return res.status(429).json({
+      message: `Too many attempts. Try again after ${waitTime} seconds`,
+    });
+  }
+
   const otp = customAlphabet('0123456789', 5)();
 
   eventEmitter.emit('forgetPassword', { email, otp });
 
   user.otp = await Hash({ plainText: otp });
+  user.otpExpiresAt = new Date(Date.now() + 2 * 60 * 1000); // 2 min from now
+  user.failedAttempts = 0; // reset attempts
   await user.save();
 
   return res.status(200).json({ message: 'Check Your Email' });
@@ -259,15 +270,35 @@ export const resetPassword = async (req, res, next) => {
     throw new Error('User Email Doesnt exist or OTP Invalid');
   }
 
-  const hasedNewPassword = await Hash({ plainText: newPassword });
-  if (!(await Compare({ plainText: otp, cipherText: user?.otp }))) {
-    throw new Error('OTP Doesnt Match ');
+  // Check OTP expiration
+  if (!user.otpExpiresAt || user.otpExpiresAt < new Date()) {
+    throw new Error('OTP has expired, please request a new one');
   }
 
-  await userModel.updateOne(
-    { email },
-    { password: hasedNewPassword, $unset: { otp: '' } }
-  );
+  // Verify OTP
+  const isValidOtp = await Compare({ plainText: otp, cipherText: user?.otp });
+  if (!isValidOtp) {
+    user.failedAttempts += 1;
+
+    if (user.failedAttempts >= 5) {
+      user.banUntil = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes ban
+      user.failedAttempts = 0; // reset counter after ban
+    }
+
+    await user.save();
+    throw new Error('Invalid OTP');
+  }
+
+  // OTP is valid → reset password
+  const hasedNewPassword = await Hash({ plainText: newPassword });
+
+  user.password = hasedNewPassword;
+  user.otp = undefined;
+  user.otpExpiresAt = undefined;
+  user.failedAttempts = 0;
+  user.banUntil = undefined;
+  await user.save();
+
   return res.status(200).json({ message: 'Password Updated Succesfully' });
 };
 

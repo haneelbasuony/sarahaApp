@@ -75,6 +75,9 @@ export const userSchema = new mongoose.Schema(
     otp: {
       type: String,
     },
+    otpExpiresAt: { type: Date },
+    failedAttempts: { type: Number, default: 0 },
+    banUntil: { type: Date },
     isDeleted: {
       type: Boolean,
     },
