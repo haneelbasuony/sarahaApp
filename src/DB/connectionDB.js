@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 
 const checkConnectionDB = async () => {
   await mongoose
-    .connect(process.env.DB_URL)
+    .connect(process.env.DB_URL_ONLINE)
     .then(() => {
       console.log('Suceccs DB Connection ^_^');
     })
